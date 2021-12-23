@@ -1,0 +1,90 @@
+1.  What happened when you inserted another row with the same primary key as an existing row?
+
+The original data in test table is as follow:
+ id | data
+----+-----------
+  1 |   initial
+  2 | secondary
+  3 |  tertiary
+
+After applying insert into the test table with the same primary key of id = 2 , the test table is updated as below:
+
+
+ id | data
+----+----------
+  1 |  initial
+  2 |   double
+  3 | tertiary
+
+Therefore, the record with id = 2 is updated. The is because upsert operation is applied when inserting another record with the same primary key.
+
+
+
+2. What happened when you query a keyspace with replication factor 1 and one node down? How did it behave with replication factor 2 and a node down?
+
+When I query a keyspace with replication factor 1 and one node down, the query "SELECT * FROM test;" and "SELECT * FROM test WHERE id=2;" cannot be processed and there is error shown: NoHostAvailable: ('Unable to complete the operation against any hosts', {<Host: 10.17.202.217:9042 datacenter1>: Unavailable('Error from server: code=1000 [Unavailable exception] message="Cannot achieve consistency level ALL" info={\'consistency\': \'ALL\', \'required_replicas\': 1, \'alive_replicas\': 0}')})
+However, for "SELECT * FROM test WHERE id=1;", "SELECT * FROM test WHERE id=3;", "SELECT * FROM test WHERE id=4;", "SELECT * FROM test WHERE id=5;", data can be queried.
+
+It is because Replication Factor = 1 means there is only one copy of a row in a cluster, and there is no way to recover the data if the node is compromised or goes down. By analysing the result, the record for id = 2 should be stored on the node which is down and for id=1,3,4,5 should be stored on the node which is up.
+
+On the other hand, when I query a key space with replication factor 2 and one node down, the following queries of the following work fine:
+SELECT * FROM test;
+SELECT * FROM test WHERE id=1;
+SELECT * FROM test WHERE id=2;
+SELECT * FROM test WHERE id=3;
+SELECT * FROM test WHERE id=4;
+SELECT * FROM test WHERE id=5;
+
+It is because Replication Factor = 2 means there are 2 copies so it works fine even if 1 node is down.
+
+
+
+3. How did the consistency level affect the results with the node up/down?
+the node is down:
+
+When the node is down, using CONSISTENCY ONE, the query 
+"INSERT INTO test (id, data) VALUES (6, 'hexadecimal');
+SELECT * FROM test;" can be processed.
+The Cassandra consistency level is defined as the minimum number of Cassandra nodes that must read or write for a successful operation.  Since the consistency level is one, only one node is read or write can result successful operation.
+
+However, using CONSISTENCY ALL, the query of the following cannot be processed:
+INSERT INTO test (id, data) VALUES (7, 'sevenish');
+INSERT INTO test (id, data) VALUES (10, 'zehn');
+SELECT * FROM test;
+SELECT * FROM test WHERE id=2;
+SELECT * FROM test WHERE id=3;
+
+Here is the error that is shown: 
+NoHostAvailable: ('Unable to complete the operation against any hosts', {<Host: 10.17.202.217:9042 datacenter1>: Unavailable('Error from server: code=1000 [Unavailable exception] message="Cannot achieve consistency level ALL" info={\'consistency\': \'ALL\', \'required_replicas\': 2, \'alive_replicas\': 1}')})
+
+It is because the consistency level is defined all nodes have to be read or written for a successful operation. Therefore, insert query, which is write, is not able to return successfully. If the query reads the data stored on the node which is down, error will be shown. Yet, if the query reads the data stored on the node which is up.
+
+When the all the nodes are up, using both CONSISTENCY ONE or CONSISTENCY ALL can work find with the following query.
+
+
+
+4. Which of the WHERE id=? values returned successfully with CONSISTENCY ALL when one of the nodes was down? Why do you think some could be returned but not others?
+
+For WHERE id = 1, id = 4 and WHERE id = 5, values returned successfully with CONSISTENCY ALL when one of the nodes was down. It is because the data of id = 1, id = 4 and id = 5 are stored on the node that is up but others are stored on the node that is down.
+
+
+
+5. What was the CREATE TABLE statement you used for the nasalogs table? What was the primary key you choose, and why?
+
+CREATE TABLE nasalogs (
+  id UUID,
+  host TEXT,
+  datetime TIMESTAMP,
+  path TEXT,
+  bytes INT,
+  PRIMARY KEY (host, id)
+);
+
+There are no elements of the original data that can be combined to form unique primary key. Therefore, I have added a UUID field. In order to make the data partition into different nodes according to the host, I have created a compound primary key (host, id) which with the host placed at the first position to control the data partitioning and an id to make it unique.  Therefore, the records with same host will be stored on the same nodes.
+
+
+6. What was the CQL query you used (or tried) to get the total number of bytes?
+SELECT sum(bytes) AS total_number_of_bytes FROM nasalogs
+
+However, timeout error is shown:
+ReadTimeout: Error from server: code=1200 [Coordinator node timed out waiting for replica nodes' responses] message="Operation timed out - received only 0 responses." info={'consistency': 'ONE', 'required_responses': 1, 'received_responses': 0}

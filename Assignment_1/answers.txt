@@ -1,0 +1,39 @@
+Q1: Are there any parts of the original WordCount that still confuse you? If so, what?
+A1: I am not sure if the job.setCombinerClass in the wordcount example is redundant, as the original code has assigned InSumReducer.class to it which is the same as job.setReducerClass. Is it necessary to include that line?
+Also, by removing the punctuation, some words like "sister's" is counted as "sister" and "s" separately. Maybe we should further define the meaning of word and refine the regex to enhance the result.  
+
+Q2: How did the output change when you submitted with -D mapreduce.job.reduces=3? Why would this be necessary if your job produced large output sets?
+A2: 
+There will be separated into 3 output files namely part-r-00000, part-r-00001 and part-r-00002 instead of only 1 file.
+
+With the reducer, data output sets can be run in parallel to optimise the run time and provide fault tolerance.
+
+
+Q3: How was the -D mapreduce.job.reduces=0 output different?
+A3: The results of the words are not grouped and counted. They are all separated with count = 1.
+As no reducer is run, the output should be the result from the mapper.
+Here are some results extracted from the output file:
+
+of      1
+the     1
+two     1
+daughters       1
+of      1
+a       1
+most    1
+affectionate    1
+indulgent       1
+father  1
+and     1
+had     1
+in      1
+consequence     1
+of      1
+
+
+Q4: Was there any noticeable difference in the running time of your RedditAverage with and without the combiner optimization?
+A4:
+With combiner optimization, the CPU time spent (ms)=31900
+For without combiner optimization, CPU time spent (ms)=34060
+
+There is not much difference on the run time. However, with the combiner optimization is slight faster than without combiner optimization. It may due to the size of the data set is not large enough to see the difference obviously.

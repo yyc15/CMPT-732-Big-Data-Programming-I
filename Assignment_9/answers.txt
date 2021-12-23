@@ -1,0 +1,138 @@
+Part 1: Redshift as a data warehouse
+QUESTION 1: DEBIT OR CREDIT?
+Do people from Ontario tend to put larger purchases on one payment method?
+
+Here is the result:
+*********
+payment_method	avg_amount
+credit		131.40
+debit		101.06
+*********
+
+Therefore, people from Ontario tend to put larger purchases on credit card which the average purchase amount 30.34 more than that of debit.
+
+
+Here is the query:
+*********
+SELECT pay.mtype AS payment_method, avg(p.amount) AS avg_amount
+FROM purchases p, paymentmethods pay, customers c
+WHERE p.custid = c.custid
+AND p.pmid = pay.pmid
+AND c.province = 'ON'
+GROUP BY pay.mtype;
+**********
+
+
+QUESTION 2: WHO SPENDS MORE OVERALL?
+Consider the three groups of people: people who live in the Vancouver region, visitors from other BC areas, and visitors from outside BC altogether. Which group spent the most per transaction?
+
+Here is the result:
+**********
+from_bc_non_van   from_van    count    average   median
+false             true        10384    86.01     27.370
+true              false       3899     95.16     30.080
+false             false       15717    112.89    33.270
+**********
+
+
+From the result above, for those visitors from outside BC have highest count of purchases, average purchase amount and median purchase amount among all.
+Therefore, visitors from outside BC spent the most per transaction.
+
+
+Here is the SQL statement to create the required view:
+**********
+CREATE VIEW vancouver_custs AS
+WITH 
+  vprefixes (vp) AS 
+    (SELECT DISTINCT pcprefix FROM greater_vancouver_prefixes)
+SELECT custid, province,
+(CASE WHEN LEFT(postalcode, 3) IN (SELECT vp FROM vprefixes) THEN 1
+ELSE 0
+END)in_vancouver
+FROM customers;
+**********
+
+
+Here is the SQL query to support the answer:
+**********
+SELECT
+(CASE WHEN custid IN (SELECT custid FROM vancouver_custs WHERE in_vancouver = 0 AND province = 'BC') THEN true
+ELSE false
+END)From_BC_non_Van,
+(CASE WHEN custid IN (SELECT custid FROM vancouver_custs WHERE in_vancouver = 1) THEN true
+ELSE false
+END)From_Van,
+count(*) AS Count, avg(amount) AS Average, Median(amount) AS Median
+FROM purchases
+GROUP BY From_BC_non_Van, From_Van
+ORDER BY Median ASC;
+**********
+
+
+QUESTION 3: WHO SPENDS MORE ON SUSHI?
+Who spends more at restaurants that serve sushi: locals (residents of Greater Vancouver) or tourists?
+
+Here is the result:
+**********
+avg     in_vancouver
+85.80   0
+77.57   1
+**********
+
+From the above result, tourists spent 8.23 more in average purchase amount than that of locals at restaurants that serve sushi.
+
+
+Here is the SQL query to support the answer:
+************
+SELECT avg(p.amount) AS avg, v.in_vancouver
+FROM purchases p, vancouver_custs v 
+WHERE p.custid = v.custid
+AND p.amenid IN (SELECT amenid FROM amenities WHERE tags.cuisine ILIKE '%sushi%' AND amenity = 'restaurant')
+GROUP BY v.in_vancouver
+ORDER BY in_vancouver;
+************
+
+
+
+Question 4: Average purchase per day for the first five days?
+
+a. Here is the average purchase per day for the first five days:
+************
+pdate		 avg
+2021-08-01	 96.59
+2021-08-02	 106.56
+2021-08-03	 95.87
+2021-08-04	 115.50
+2021-08-05	 95.67
+************
+
+
+b. Here is the SQL query for Redshift:
+************
+SELECT pdate, avg(amount) AS avg FROM purchases
+WHERE date_part(mon, pdate) = 8
+AND date_part(d, pdate) <=5
+GROUP BY pdate
+ORDER BY pdate
+************
+
+
+c. The bytes / record ratio for Redshift on the 5-day query:
+94.06 KB / 4703 rows = 20.48 bytes / record
+
+
+d. The bytes / record ratio for Spectrum on the 5-day query?
+267396 bytes / 4703 rows = 56.86 bytes / record
+
+
+e. For this purchase dataset, the averages are 57 bytes/line and 968 lines/day. (It may be useful to explore the public-cmpt-732 bucket to derive these for yourself.) From these values, what might you infer about how Redshift scans the table? How Spectrum scans the table?
+57 bytes/line is nearly the same as the bytes/record ratio of Spectrum. According to this result, Spectrum should scan the full line (every columns) of each record. However, the bytes/record ratio is relatively small for redshift which indicates that it only scans part of columns which are used for the query.
+
+
+f. Based on these computations and the parallelism results, what properties of a dataset might make it well-suited to loading from S3 into Redshift before querying it?
+As pricing of Redshift is charged according to the size and performance of nodes, if the dataset has a relatively small volume and frequently accessed data it would be better to loading from S3 into Redshift before querying it to reduce the cost.
+
+
+g. Conversely, what properties of a dataset might make it well-suited to retaining in S3 and querying it using Spectrum?
+As pricing of Spectrum is charged according to the number of queries, if the dataset volume is huge but less frequently queried as well as required less scan and aggression queries, it is well-suited to retaining in S3 and querying it using Spectrum.
+

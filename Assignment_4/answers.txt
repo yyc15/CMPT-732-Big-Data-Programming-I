@@ -1,0 +1,17 @@
+1. How much of a difference did the .cache() make in your Reddit ETL code?
+
+Ans: I have run the Reddit ETL code with cache and without cache for reddit-2 on cluster.
+The run time for Reddit ETL code with cache is 25s. On the other hand, the run time for Reddit ETL code without cache is 29s. By the result of run time, the Reddit code runs faster with .cache() added.
+
+2. When would .cache() make code slower than without?
+
+Ans: We all the memory resources available are used by executors, if the RDD blocks from the cache is not reused by the application, the performance will be slower than without.
+In other words, since Spark application can run faster by caching due to the partial results can be reused in the following stages of computation. If cache is not placed in an appropriate stage, the cached partial results cannot be reused again, this will not only waste the memory resource but also affect the performance as caching also takes time. Therefore, we should make sure all the transformations are applied to the partial results before caching so that the cached result can be reused frequently for the next steps to reduce the computation time. 
+
+3. Under what conditions will the broadcast join be faster than an actual join?
+
+Ans: When the broadcasted dataset is small and the dataset to be joined is large, the broadcast join will be faster than an actual join. It is because the small dataset is copied and sent to all the executor nodes. Each executor will be self-sufficient in joining the big dataset records in each node with the small broadcasted table which do not required all-to-all communication.
+
+4. When will the broadcast join be slower?
+
+Ans: When the broadcasted data is large, when it is copied and sent to all the executor nodes, many resources are taken up. This process will require a lot of time. Hence, the broadcast join performance is slow.
